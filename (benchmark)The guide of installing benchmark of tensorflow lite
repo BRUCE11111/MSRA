@@ -1,0 +1,188 @@
+开发tensorflow lite，这里使用的是android studio。
+
+一、安装JAVA JDK 
+在安装android studio前，需要安装JAVA JDK，因为android是JAVA语言。
+1、安装java jdk，只需要下面3条命令：
+
+sudo add-apt-repository ppa:webupd8team/java
+sudo apt-get update
+sudo apt-get install oracle-java8-installer
+
+2、使用 java –version查看是否安装成功，成功如下图。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+二、安装Android Studio
+1、打开“这个链接“，下载AndroidStudio。
+2、将下载的压缩包解压到某位置，打开终端，cd进入android-studio/bin目录“./studio.sh”进行安装
+3、剩余部分参考博文配置studio，这里其实就可以自己摸索使用studio了。https://blog.csdn.net/weidong32768/article/details/80466980
+三、安装bazel
+安装bazel 参考：这个链接
+四、ubuntu下安装adb（安卓与PC支持桥梁软件）
+1、安装adb命令
+
+sudo add-apt-repository ppa:nilarimogard/webupd8
+sudo apt-get update
+sudo apt-get install android-tools-adb
+
+2、查看是否成功
+adb -v 有信息则成功
+
+3、配置
+（1）看adb 是否识别安卓设备
+插入usb,使用命令：
+
+adb devices
+
+查找设备，发现List of devices attached 为空，说明adb还不能识别该设备，但是usb还是能够识别的。
+因此要先定位usb设备。定位usb方法如下：
+在使用adb时，一定要打开手机的开发人员选项——》打开USB调试，截图为华为手机。
+
+
+
+
+
+
+
+
+
+
+
+
+
+（2）发现并定位插入的usb设备
+拔掉usb,插上usb，命令：
+
+lsusb
+
+对比设备变化，发现新的设备，如我的设备为
+Bus 001 Device 044: ID 2207:0010
+就是你插入的设备。
+（3）设备条目解析 
+我的设备条目如下 
+Bus 001 Device 014:ID 2207 : 0010 
+其中 2207就是设备的 idVendor， 0010 是 idProduct 
+注意这个和下文的配置有关，很重要。
+4、配置adb
+知道设备的名称和id了，就需要配置adb参数，让adb识别这个usb设备。
+（1）创建并编辑一个51-android.rules配置文件
+创建：
+
+sudo vi /etc/udev/rules.d/51-android.rules
+
+编辑，在该文件中加入如下格式的信息：
+
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", MODE="0666"
+
+（2）修改51-android.rules 的权限
+
+sudo chmod a+rx /etc/udev/rules.d/51-android.rules
+给他加上可读和可执行权限
+
+（3）增加adb_usb.ini文件并编辑使adb识别该设备
+编辑
+
+vi ~/.android/adb_usb.ini
+
+在中间加入厂商id即idVendor的值
+0x2207
+注意需要加上0x的前缀	
+（4）重启adb
+
+adb kill-server
+adb start-server
+到这里就配置完了.
+（5）查看配置是否成功
+插入usb,使用
+
+adb devices
+
+
+
+五、安装android NDK和SDK
+1、SDK可以到android studio 里的configure —— settings-
+
+安装的SDK，安装的路径应该是/home/你的用户名/Android （一般默认都是安装在这里）
+2、安装的NDK必须是r14。其他版本不能用，已经试过了。
+各个版本链接：这个链接。需要翻墙，可以用迅雷下载。
+其中的NDK，用迅雷下载安装包，解压文件到/home/你的用户名/Android/Sdk/ndk-bundle/
+
+
+
+
+
+如果没有ndk-bundle文件夹，则自行创建。
+和安装jdk的过程相同，下一步的工作便是配置ndk的环境变量。
+
+sudo vim ~/.bashrc
+加上如下两行代码
+export NDKROOT=/home/bruce/Android/Sdk/ndk-bundle
+export PATH=$NDKROOT:$PATH
+路径改成你的路径
+
+使用命令
+ndk-build –v
+查看是否成功
+
+3、首先下载tensorflow源码文件。
+
+git clone https://github.com/tensorflow/tensorflow.git
+一般下载下来在/home/你的用户名/ 下。
+
+cd tensorflow/
+进入tensorflow文件夹，运行命令
+./configure
+开始配置tensorflow，如果是否安装什么support可以都选择n。默认的按enter。直到出现是否./workplace，如果前面的NDK和SDK都正确，则可以完成配置。
+六、编译benchmark程序
+(1) Build for your specific platform, e.g.:
+
+bazel build -c opt \
+  --config=android_arm \
+  --cxxopt='--std=c++11' \
+  --copt=-DTFLITE_PROFILING_ENABLED \
+  tensorflow/lite/tools/benchmark:benchmark_model
+
+完成后的benchmark_module在bazel_bin/lite/tools/benchmark/
+
+
+(2) Connect your phone. Push the binary to your phone with adb push
+     (make the directory if required):
+
+```
+adb push bazel-bin/tensorflow/lite/tools/benchmark/benchmark_model /data/local/tmp
+```
+
+(3) Make the binary executable.
+
+```
+adb shell chmod +x /data/local/tmp/benchmark_model
+```
+
+(4) Push the compute graph that you need to test. For example:
+
+```
+adb push mobilenet_quant_v1_224.tflite /data/local/tmp
+```
+
+(5) Run the benchmark. For example:
+
+```
+adb shell /data/local/tmp/benchmark_model \
+  --graph=/data/local/tmp/mobilenet_quant_v1_224.tflite \
+  --num_threads=4
+```
